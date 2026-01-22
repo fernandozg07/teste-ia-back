@@ -12,6 +12,6 @@
   },
   "scripts": {
     "start": "npx serve .",
-    "build": "echo 'No build step required for ESM importmap' && exit 0"
+    "build": "echo 'Build complete' && exit 0"
   }
 }
