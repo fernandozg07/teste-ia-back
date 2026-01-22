@@ -1,3 +1,4 @@
+import { GoogleGenAI, Type } from "@google/genai";
 import { AnalysisResult, ChatMessage, FileAttachment } from "../types";
 
 const SYSTEM_INSTRUCTION = `Você é o "Strategic Sales Copilot" Sênior do PortoBank. Sua autoridade vem da PRECISÃO matemática e profundidade estratégica.
@@ -35,66 +36,47 @@ export class GeminiService {
     attachment?: FileAttachment,
     useSearch: boolean = true
   ): Promise<{ text: string; analysis?: AnalysisResult; urls?: { uri: string; title: string }[] }> {
+    
+    // Inicialização dinâmica para capturar a chave de API atualizada do processo/seletor
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) throw new Error("API_KEY não configurada");
+    const history = messages.slice(0, -1).map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }]
+    }));
 
-    const formattedMessages: any[] = [
-      {
-        role: "system",
-        content: SYSTEM_INSTRUCTION
-      },
-      ...messages.map(m => ({
-        role: m.role === "assistant" ? "assistant" : "user",
-        content: m.content
-      }))
-    ];
+    const lastMsg = messages[messages.length - 1];
+    const lastMsgParts: any[] = [{ text: lastMsg.content }];
 
     if (attachment) {
-      if (attachment.mimeType.includes("pdf") || attachment.mimeType.includes("image")) {
-        formattedMessages.push({
-          role: "user",
-          content: [
-            { type: "text", text: messages[messages.length - 1].content },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:${attachment.mimeType};base64,${attachment.data}`
-              }
-            }
-          ]
+      if (attachment.mimeType.includes('pdf') || attachment.mimeType.includes('image')) {
+        lastMsgParts.push({
+          inlineData: {
+            mimeType: attachment.mimeType,
+            data: attachment.data
+          }
         });
       } else {
-        formattedMessages[formattedMessages.length - 1].content +=
-          `\n\n[DADOS BRUTOS DO ARQUIVO]:\n${attachment.data}\n\nAnalise rigorosamente estes dados.`;
+        lastMsgParts[0].text += `\n\n[DADOS BRUTOS DO ARQUIVO]:\n${attachment.data}\n\nAnalise rigorosamente estes dados.`;
       }
     }
 
     try {
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "https://seu-dominio.com", // obrigatório no OpenRouter
-          "X-Title": "PortoBank Strategic Copilot"
-        },
-        body: JSON.stringify({
-          model: "google/gemini-1.5-pro",
-          messages: formattedMessages,
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-pro-preview',
+        contents: [
+          ...history,
+          { role: 'user', parts: lastMsgParts }
+        ],
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+          tools: useSearch ? [{ googleSearch: {} }] : undefined,
           temperature: 0.1,
-          top_p: 0.8
-        })
+          topP: 0.8,
+        },
       });
 
-      if (!response.ok) {
-        const err = await response.text();
-        throw new Error(err);
-      }
-
-      const data = await response.json();
-      const fullText: string = data.choices?.[0]?.message?.content || "";
-
+      const fullText = response.text || "";
       let analysis: AnalysisResult | undefined;
       let cleanText = fullText;
 
@@ -109,12 +91,16 @@ export class GeminiService {
         console.error("Erro de Parsing Analítico:", e);
       }
 
-      return { text: cleanText, analysis };
+      const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+      const urls = groundingChunks?.map((chunk: any) => ({
+        uri: chunk.web?.uri || "",
+        title: chunk.web?.title || "Fonte de Mercado"
+      })).filter((u: any) => u.uri !== "");
+
+      return { text: cleanText, analysis, urls };
     } catch (error: any) {
-      if (error.message?.includes("429")) {
-        throw new Error(
-          "COTA_EXCEDIDA: Limite atingido no OpenRouter. Verifique saldo ou modelo."
-        );
+      if (error.message?.includes('429') || error.status === 'RESOURCE_EXHAUSTED') {
+        throw new Error("COTA_EXCEDIDA: Você atingiu o limite do Gemini 3 Pro. Por favor, configure uma chave de API com faturamento ativo no topo da tela.");
       }
       throw error;
     }
