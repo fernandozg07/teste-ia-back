@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Paperclip, Loader2, Sparkles, User, Bot, Globe, X, FileText, Image as ImageIcon } from 'lucide-react';
+import { Send, Paperclip, Loader2, Sparkles, User, Bot, Globe, X, FileText, Image as ImageIcon, AlertTriangle } from 'lucide-react';
 import { ChatMessage, FileAttachment } from '../types';
 import { GeminiService } from '../services/geminiService';
 
@@ -70,16 +70,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onAnalysisReceived, onMes
       };
 
       setMessages(prev => [...prev, assistantMessage]);
-      
-      if (analysis) {
-        onAnalysisReceived(analysis);
-      }
-    } catch (error) {
+      if (analysis) onAnalysisReceived(analysis);
+    } catch (error: any) {
       console.error(error);
+      const isQuotaError = error.message?.includes('COTA_EXCEDIDA');
+      
       setMessages(prev => [...prev, {
         id: Date.now().toString(),
         role: 'assistant',
-        content: "Houve uma inconsistência no processamento. Por favor, verifique os dados e tente novamente.",
+        content: isQuotaError 
+          ? "⚠️ Limite de cota atingido para o modelo Pro. Por favor, clique no botão 'Configurar API Key' no topo da tela e selecione um projeto com faturamento ativo."
+          : "Houve uma inconsistência no processamento. Por favor, verifique os dados e tente novamente.",
         timestamp: new Date()
       }]);
     } finally {
@@ -101,16 +102,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onAnalysisReceived, onMes
       setPendingFile({
         name: file.name,
         type: file.type,
-        mimeType: file.mimeType || file.type,
+        mimeType: file.type,
         data: base64Data
       });
     };
 
-    if (isBinary) {
-      reader.readAsDataURL(file);
-    } else {
-      reader.readAsText(file);
-    }
+    if (isBinary) reader.readAsDataURL(file);
+    else reader.readAsText(file);
+    
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -141,10 +140,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onAnalysisReceived, onMes
                 <div className={`p-4 rounded-2xl text-sm leading-relaxed ${
                   msg.role === 'user' 
                     ? 'bg-slate-900 text-white rounded-tr-none' 
-                    : 'bg-slate-50 text-slate-800 border border-slate-100 rounded-tl-none shadow-sm'
+                    : msg.content.includes('⚠️') 
+                      ? 'bg-amber-50 border border-amber-200 text-amber-900 rounded-tl-none shadow-sm'
+                      : 'bg-slate-50 text-slate-800 border border-slate-100 rounded-tl-none shadow-sm'
                 }`}>
                   <div className="prose prose-sm max-w-none">
-                    {msg.content.split('```json')[0]}
+                    {msg.content}
                   </div>
                   
                   {msg.groundingUrls && msg.groundingUrls.length > 0 && (
@@ -164,7 +165,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onAnalysisReceived, onMes
         {isLoading && (
           <div className="flex justify-start items-center gap-3 px-1 animate-pulse">
             <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Analisando Arquivos...</span>
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Processando...</span>
           </div>
         )}
       </div>
@@ -176,10 +177,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onAnalysisReceived, onMes
               <div className="bg-blue-50 p-2 rounded-lg">
                 {pendingFile.type.includes('image') ? <ImageIcon className="w-4 h-4 text-blue-600" /> : <FileText className="w-4 h-4 text-blue-600" />}
               </div>
-              <div className="flex flex-col">
-                <span className="text-xs font-bold text-slate-800 truncate max-w-[200px]">{pendingFile.name}</span>
-                <span className="text-[10px] text-slate-400 uppercase font-medium">{pendingFile.type.split('/')[1]}</span>
-              </div>
+              <span className="text-xs font-bold text-slate-800 truncate max-w-[200px]">{pendingFile.name}</span>
             </div>
             <button onClick={() => setPendingFile(null)} className="p-1.5 hover:bg-red-50 rounded-full text-slate-400 hover:text-red-600 transition-colors">
               <X className="w-4 h-4" />
@@ -193,31 +191,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onAnalysisReceived, onMes
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Digite sua dúvida ou arraste um arquivo..."
+            placeholder="Digite ou arraste dados..."
             className="flex-1 bg-transparent border-none focus:outline-none text-sm text-slate-700 placeholder-slate-400 font-medium"
           />
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            className="hidden" 
-            onChange={handleFileUpload}
-            accept=".csv,.txt,.pdf,.png,.jpg,.jpeg,.webp"
-          />
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-          >
+          <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
+          <button onClick={() => fileInputRef.current?.click()} className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl">
             <Paperclip className="w-5 h-5" />
           </button>
-          <button
-            onClick={() => handleSend()}
-            disabled={(!input.trim() && !pendingFile) || isLoading}
-            className={`p-2.5 rounded-xl transition-all ${
-              (!input.trim() && !pendingFile) || isLoading 
-                ? 'bg-slate-100 text-slate-300' 
-                : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-200 active:scale-95'
-            }`}
-          >
+          <button onClick={() => handleSend()} disabled={isLoading} className="p-2.5 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-200">
             <Send className="w-5 h-5" />
           </button>
         </div>
