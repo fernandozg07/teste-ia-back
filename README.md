@@ -1,20 +1,19 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
 
-# Run and deploy your AI Studio app
+# 🚀 Strategic Sales Copilot - PortoBank Edition
 
-This contains everything you need to run your app locally.
+Este é um cockpit estratégico de vendas alimentado por IA (Gemini 3 Pro).
 
-View your app in AI Studio: https://ai.studio/apps/drive/1Z3Q_k74_kM9SeUYgusObYwHkVUol6G9q
+## Como Publicar no Vercel
 
-## Run Locally
+1. **Repositório**: Suba todos os arquivos para um repositório Git (GitHub/GitLab).
+2. **Projeto no Vercel**: No dashboard do Vercel, clique em "Add New" -> "Project".
+3. **Variáveis de Ambiente**:
+   - Vá em **Settings** -> **Environment Variables**.
+   - Adicione: `API_KEY` = `Sua_Chave_Gemini_Aqui`.
+4. **Deploy**: O Vercel identificará automaticamente os arquivos.
 
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Stack Técnica
+- **Engine**: Google Gemini 3 Pro (via @google/genai)
+- **UI**: React 19 + Tailwind CSS
+- **Charts**: Recharts (Data-driven visualization)
+- **Icons**: Lucide React
