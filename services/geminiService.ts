@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { AnalysisResult, ChatMessage, FileAttachment } from "../types";
 
@@ -37,7 +38,7 @@ export class GeminiService {
     useSearch: boolean = true
   ): Promise<{ text: string; analysis?: AnalysisResult; urls?: { uri: string; title: string }[] }> {
     
-    // Inicialização dinâmica para capturar a chave de API atualizada do processo/seletor
+    // Inicialização dinâmica garantindo o uso da chave de API mais recente
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     const history = messages.slice(0, -1).map(m => ({
@@ -63,7 +64,8 @@ export class GeminiService {
 
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
+        // Flash é o modelo recomendado para alta disponibilidade no nível gratuito
+        model: 'gemini-3-flash-preview',
         contents: [
           ...history,
           { role: 'user', parts: lastMsgParts }
@@ -91,7 +93,8 @@ export class GeminiService {
         console.error("Erro de Parsing Analítico:", e);
       }
 
-      const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+      const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+      const groundingChunks = groundingMetadata?.groundingChunks;
       const urls = groundingChunks?.map((chunk: any) => ({
         uri: chunk.web?.uri || "",
         title: chunk.web?.title || "Fonte de Mercado"
@@ -100,7 +103,7 @@ export class GeminiService {
       return { text: cleanText, analysis, urls };
     } catch (error: any) {
       if (error.message?.includes('429') || error.status === 'RESOURCE_EXHAUSTED') {
-        throw new Error("COTA_EXCEDIDA: Você atingiu o limite do Gemini 3 Pro. Por favor, configure uma chave de API com faturamento ativo no topo da tela.");
+        throw new Error("COTA_EXCEDIDA: O limite gratuito foi temporariamente atingido. Tente novamente em 30 segundos ou use uma chave com billing.");
       }
       throw error;
     }
